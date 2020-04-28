@@ -8,7 +8,6 @@ const getAll = async () => {
 }
 
 const create = async (blog, token) => {
-  axios.post()
   const response = await axios
     .post(baseUrl, blog, 
       { 'headers':
@@ -19,4 +18,26 @@ const create = async (blog, token) => {
   return response.data
 }
 
-export default { getAll, create }
+const update = async (blog, token) => {
+  const response = await axios
+    .put(`${baseUrl}/${blog.id}`, blog,
+      { 'headers':
+          { 'Authorization': `Bearer ${token}` }
+      }
+    )
+
+  return response.data;
+}
+
+const remove = async (id, token) => {
+  const response = await axios
+    .delete(`${baseUrl}/${id}`,
+      { 'headers':
+        { 'Authorization': `Bearer ${token}` }
+      }
+    )
+
+  return response.data
+}
+
+export default { getAll, create, update, remove }

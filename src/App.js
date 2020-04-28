@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import './App.css'
 import ErrorMessage from './components/ErrorMessage'
 import SuccessMessage from './components/SuccessMessage'
@@ -8,6 +8,7 @@ import CreateForm from './components/CreateForm'
 import LoginStatus from './components/LoginStatus'
 import blogService from './services/blogs'
 import loginService from './services/login'
+import Togglable from './components/Togglable'
 
 const LOGGED_BLOG_LIST_USER = 'loggedBlogListUser'
 
@@ -15,13 +16,8 @@ const App = () => {
   const [errorMessage, setErrorMessage] = useState(null)
   const [successMessage, setSuccessMessage] = useState(null)
   const [blogs, setBlogs] = useState([])
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
   const [user, setUser] = useState(null)
   const [token, setToken] = useState('')
-  const [createTitle, setCreateTitle] = useState('')
-  const [createAuthor, setCreateAuthor] = useState('')
-  const [createUrl, setCreateUrl] = useState('')
 
   const fetchBlogs = async () => setBlogs(await blogService.getAll())
 
@@ -39,44 +35,91 @@ const App = () => {
     }
   }, [])
 
-  const submitLoginHandler = async e => {
-    e.preventDefault()
+  const noteFormRef = useRef();
+
+  const loginUser = async ({ username, password }) => {
     try {
       const user = await loginService.login({username, password})
 
       window.localStorage.setItem(LOGGED_BLOG_LIST_USER, JSON.stringify(user))
 
       setUser(user)
-      setUsername('')
-      setPassword('')
+
+      return true
     } catch (exception) {
       setErrorMessage('wrong credentials')
       setTimeout(() => setErrorMessage(null), 5000)
+
+      return false
     }
   }
 
-  const submitCreateHandler = async e => {
-    e.preventDefault()
+  const createBlog = async ({ title, author, url }) => {
     try {
       await blogService
         .create({
-          title: createTitle,
-          author: createAuthor,
-          url: createUrl,
+          title,
+          author,
+          url,
         }, token)
 
-      setSuccessMessage(`added new blog ${createTitle} by ${createAuthor}`)
+      setSuccessMessage(`added new blog ${title} by ${author}`)
       setTimeout(() => setSuccessMessage(null), 5000)
 
       fetchBlogs()
 
-      setCreateTitle('')
-      setCreateAuthor('')
-      setCreateUrl('')
+      noteFormRef.current.toggleStatus();
+
+      return true
     } catch (exception) {
       setErrorMessage(exception.message)
       setTimeout(() => setErrorMessage(null), 5000)
+      return false
     }
+  }
+
+  const updateBlog = async blog => {
+    try {
+      await blogService
+        .update(blog, token);
+
+      setSuccessMessage(`updated blog ${blog.title} by ${blog.author}`)
+      setTimeout(() => setSuccessMessage(null), 5000);
+
+      setBlogs(blogs.map(bblog => bblog.id === blog.id ? blog : bblog));
+
+      return true;
+    } catch (exception) {
+      setErrorMessage('wrong credentials')
+      setTimeout(() => setErrorMessage(null), 5000)
+
+      return false
+    }
+  };
+
+  const removeBlog = async blog => {
+    try {
+      if (!window.confirm(`remove blog ${blog.title} by ${blog.author}`)) return false;
+
+      await blogService
+        .remove(blog.id, token);
+
+      setSuccessMessage(`removed blog ${blog.title} by ${blog.author}`)
+      setTimeout(() => setSuccessMessage(null), 5000);
+
+      setBlogs(blogs.filter(bblog => bblog.id !== blog.id));
+
+      return true;
+    } catch (exception) {
+      setErrorMessage('wrong credentials')
+      setTimeout(() => setErrorMessage(null), 5000)
+
+      return false
+    }
+  }
+
+  const canRemove = blog => {
+    return blog.user.id === user.id
   }
 
   const clickLogoutHandler = () => {
@@ -84,38 +127,33 @@ const App = () => {
     window.localStorage.removeItem(LOGGED_BLOG_LIST_USER)
   }
 
-  const changeUsernameHandler = ({ target }) => setUsername(target.value)
-  const changePasswordHandler = ({ target }) => setPassword(target.value)
-  const changeTitleHandler = ({ target }) => setCreateTitle(target.value)
-  const changeAuthorHandler = ({ target }) => setCreateAuthor(target.value)
-  const changeUrlHandler = ({ target }) => setCreateUrl(target.value)
-
   return (
     <div>
       {!errorMessage || <ErrorMessage message={errorMessage} />}
       {!successMessage || <SuccessMessage message={successMessage} />}
       {user === null || <LoginStatus user={user} clickLogoutHandler={clickLogoutHandler} />}
       {user !== null || 
-        <LoginForm 
-          submitHandler={submitLoginHandler} 
-          username={username} 
-          changeUsernameHandler={changeUsernameHandler} 
-          password={password}
-          changePasswordHandler={changePasswordHandler}
-        />
+        <Togglable
+          buttonLabel="login"
+        >
+          <LoginForm loginUser={loginUser} />
+        </Togglable>
       }
       {user === null || 
-        <CreateForm 
-          createTitle={createTitle} 
-          changeTitleHandler = {changeTitleHandler}
-          createAuthor={createAuthor}
-          changeAuthorHandler={changeAuthorHandler}
-          createUrl={createUrl}
-          changeUrlHandler={changeUrlHandler}
-          submitHandler={submitCreateHandler}
-        />
+        <Togglable
+          buttonLabel="new blog"
+          ref={noteFormRef}
+        >
+          <CreateForm createBlog={createBlog} />
+        </Togglable>
       }
-      {user === null || <Blogs blogs={blogs} />}
+      {user === null || 
+        <Blogs 
+          blogs={blogs} 
+          updateBlog={updateBlog} 
+          removeBlog={removeBlog}
+          canRemove={canRemove}
+        />}
     </div>
   )
 }
